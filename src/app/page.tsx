@@ -6,12 +6,12 @@ export const dynamic = 'force-dynamic';
 interface Todo {
   id: number;
   text: string;
-  completed?: boolean;
+  completed: boolean;
 }
 
 export default async function TodoPage() {
   const dbUrl = process.env.DATABASE_URL;
-  
+
   let todos: Todo[] = [];
   if (dbUrl) {
     const sql = neon(dbUrl);
@@ -25,6 +25,30 @@ export default async function TodoPage() {
 
     const sql = neon(process.env.DATABASE_URL);
     await sql`INSERT INTO todos (text) VALUES (${text});`;
+    revalidatePath('/');
+  }
+
+  async function toggleTodo(formData: FormData) {
+    'use server';
+    const id = formData.get('id') as string;
+    if (!id || !process.env.DATABASE_URL) return;
+
+    const sql = neon(process.env.DATABASE_URL);
+    // Get current todo to toggle completed
+    const todo = (await sql`SELECT * FROM todos WHERE id = ${id};`)[0];
+    if (!todo) return;
+
+    await sql`UPDATE todos SET completed = NOT ${todo.completed} WHERE id = ${id};`;
+    revalidatePath('/');
+  }
+
+  async function deleteTodo(formData: FormData) {
+    'use server';
+    const id = formData.get('id') as string;
+    if (!id || !process.env.DATABASE_URL) return;
+
+    const sql = neon(process.env.DATABASE_URL);
+    await sql`DELETE FROM todos WHERE id = ${id};`;
     revalidatePath('/');
   }
 
@@ -60,9 +84,34 @@ export default async function TodoPage() {
             todos.map((item: Todo) => (
               <li
                 key={item.id}
-                className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-800"
+                className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-200 rounded-lg"
               >
-                <span className="text-sm font-medium">{item.text}</span>
+                <div className="flex items-center gap-3">
+                  <form action={toggleTodo} className="flex items-center gap-2">
+                    <input
+                      type="hidden"
+                      name="id"
+                      value={item.id}
+                    />
+                    <input
+                      type="checkbox"
+                      checked={item.completed}
+                      className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                    />
+                  </form>
+                  <span className={`
+                    flex-1 min-w-0 text-lg font-medium
+                    ${item.completed ? 'line-through text-gray-400' : 'text-gray-800'}
+                  `}>
+                    {item.text}
+                  </span>
+                </div>
+                <form action={deleteTodo} className="ml-2">
+                  <input type="hidden" name="id" value={item.id} />
+                  <button type="submit" className="text-red-500 hover:text-red-700">
+                    Delete
+                  </button>
+                </form>
               </li>
             ))
           )}
